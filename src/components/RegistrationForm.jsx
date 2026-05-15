@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import './RegistrationForm.css'
 
 export default function RegistrationForm() {
 
@@ -28,8 +29,116 @@ export default function RegistrationForm() {
         confirmPassword: false
     })
 
-    
+    const  pageLoadTime = useRef(Date.now())
+    const firstInteractionTime=useRef(null)
+    const lastKeystrokeTime= useRef(null)
+    const submitAttempts = useRef(0)
 
+    useEffect(()=>{
+        const saved = localStorage.getItem('registrationDate')
+
+        if(saved){
+            try{
+                const date = JSON.parse(saved)
+                if(date.username) setUsername(date.username)
+                 if(date.phone) setPhone(date.phone)
+                 if(date.email) setEmail(date.email)
+                alert('с возвращением')
+            } catch (e){
+        console.log('ошибка чтения локал сторедж', e)}
+        }
+    }, [])
+
+    function markInteraction (){
+        const now = Date.now()
+        if(firstInteractionTime.current === null){
+            firstInteractionTime.current = now
+        }
+        lastKeystrokeTime.current = now
+    }
+
+    function checkSpamProtection() {
+        const now = Date.now()
+        const timeSincePageLoad = now - pageLoadTime.current
+        if(timeSincePageLoad < 3000){
+            return {isSpam: true, message: 'Ознакомьтесь с формой перед заполнением. Потом попробуй'}
+        }
+
+        if(firstInteractionTime.current !== null){
+            const fillDuration = now - firstInteractionTime.current
+            if(fillDuration < 2000){
+                return {
+                    isSpam: true,
+                    message: 'Не спеши)'
+                }
+            }
+        }
+
+       
+
+        submitAttempts.current += 1
+        if(submitAttempts.current > 3){
+            return {
+                    isSpam: true,
+                    message: 'Слишком много попыток отправки. Жди сука'
+                }
+        }
+
+        return {
+            isSpam: false,
+            message: ''
+        }
+    }
+
+    function handleSubmit(event){
+        event.preventDefault()
+        const spamCheck = checkSpamProtection()
+        if(spamCheck.isSpam){
+            alert(spamCheck.message)
+            return;
+        }
+
+        
+            const usernameErr = validateUserName(username)
+            const emailErr = validateEmail(email)
+            const phoneErr = validatePhone(phone)
+            const passwordErr = validatePassword(password)
+            const confirmPasswordErr = validateConfirmPassword(confirmPassword)
+
+            if(usernameErr || emailErr || phoneErr || passwordErr || confirmPasswordErr){
+                setErrors({
+                    username: usernameErr,
+                    email: emailErr,
+                    phone: phoneErr,
+                    password: passwordErr,
+                    confirmPassword: confirmPasswordErr
+                })
+
+                setTouched({ username: true, email: true, phone: true, password: true, confirmPassword: true })
+
+                alert('Пожалуйста, исправьте ошибки в форме')
+                return
+
+            }
+        
+
+        const dataToSave = {
+            username: username,
+            email: email,
+            phone: phone,
+            savedAt: new Date().toISOString()
+        }
+
+        localStorage.setItem('registrationDate', JSON.stringify(dataToSave))
+        alert(`Отбор пройден`)
+
+        submitAttempts.current = 0;
+
+         setUsername(''); setEmail(''); setPhone(''); setPassword(''); setConfirmPassword('')
+    setTouched({ username: false, email: false, phone: false, password: false, confirmPassword: false })
+    setPasswordStrength({ score: 0, label: '', color: '#ddd' })
+    setErrors({ username: '', email: '', phone: '', password: '', confirmPassword: '' })
+    }
 
     function validateUserName(value) {
         if(value.trim().length === 0) {
@@ -58,7 +167,7 @@ export default function RegistrationForm() {
             return 'Телефон обязателен для заполнения'
         }
         const cleaned = value.replace(/[\s\-()]/g, '')
-        if( !/^\+&\d{10,12}$/.test(cleaned) ) {
+        if( !/^\+\d{10,12}$/.test(cleaned) ) {
             return 'Введите корректный номер'
         }
         return '';
@@ -82,12 +191,13 @@ export default function RegistrationForm() {
         }
         return '';
     }
+    
 
-    function validateСоташкьPassword(value) {
+    function validateConfirmPassword(value) {
         if(value.length === 0) {
             return 'Подтвердите пароль'
         }
-        if(value.length !== password) {
+        if(value !== password) {
             return 'Пароли не совпадают'
         }
         return '';
@@ -95,6 +205,7 @@ export default function RegistrationForm() {
 
     function handleChange(fieldName) {
         return function(event){
+            markInteraction()
             const value = event.target.value;
             let error ='';
 
@@ -114,6 +225,7 @@ export default function RegistrationForm() {
                 case 'password':
                     setPassword(value);
                     error = validatePassword(value);
+                    setPasswordStrength(calculatePasswordStrength(value))
                     break;
                 case 'confirmPassword':
                     setConfirmPassword(value);
@@ -166,7 +278,7 @@ export default function RegistrationForm() {
   return (
     <div className='form-container'>
         <h1>Регистрация</h1>
-        <form>
+        <form onSubmit={handleSubmit}>
             <div className="form-field">
                 <label htmlFor="username">Имя пользователя *</label>
                 <input 
@@ -198,7 +310,7 @@ export default function RegistrationForm() {
             <div className="form-field">
                 <label htmlFor="phone">Телефон *</label>
                 <input 
-                type="phone"
+                type="tel"
                 id='phone' 
                 placeholder='Введите ваш телефон'
                 value={phone}
@@ -221,6 +333,23 @@ export default function RegistrationForm() {
                 {touched.password && errors.password && (
                     <span className='error-message'>{errors.password}</span>
                 )}
+                {password && (
+                    <div className="password-strength">
+                        <div className="strength-bar-bg">
+                            <div className="strength-bar-fill"
+                            style={
+                                {width: `${(passwordStrength.score / 7) * 100}%`,
+                                backgroundColor: passwordStrength.color,
+                                transition: 'width 0.3s ease, background-color 0.3s ease'}
+                                }/>
+
+                           
+                        </div>
+                        <span style={{color: passwordStrength.color,}}>
+                            {passwordStrength.label}
+                        </span>
+                    </div>
+                )}
             </div>
             <div className="form-field">
                 <label htmlFor="confirmPassword">Подтвердите пароль *</label>
@@ -235,6 +364,8 @@ export default function RegistrationForm() {
                     <span className='error-message'>{errors.confirmPassword}</span>
                 )}
             </div>
+
+            <button type="submit" className='submit-btn'>Отравить</button>
         </form>
     </div>
   )
