@@ -1,0 +1,256 @@
+import './offer.scss'
+import decor from '../../assets/img/decor.svg'
+import React, { useEffect, useRef, useState } from 'react'
+
+function Offer() {
+    const [username, setUsername] = useState('')
+    const [email, setEmail] = useState('')
+    const [phone, setPhone] = useState('')
+    const [message, setMessage] = useState('')
+    const [errors, setErrors] = useState({
+        username: '',
+        email: '',
+        phone: '',
+        message: ''
+    })
+    const [touched, setTouched] = useState({
+        username: false,
+        email: false,
+        phone: false,
+        message: false
+    })
+
+    const pageLoadTime = useRef(Date.now())
+    const firstInteractionTime = useRef(null)
+    const lastKeystrokeTime = useRef(null)
+    const submitAttempts = useRef(0)
+
+    useEffect(() => {
+        const saved = localStorage.getItem('offerData')
+        if (saved) {
+            try {
+                const data = JSON.parse(saved)
+                if (data.username) setUsername(data.username)
+                if (data.phone) setPhone(data.phone)
+                if (data.email) setEmail(data.email)
+                if (data.message) setMessage(data.message)
+                alert('С возвращением!')
+            } catch (e) {
+                console.log('ошибка чтения локал сторедж', e)
+            }
+        }
+    }, [])
+
+    function markInteraction() {
+        const now = Date.now()
+        if (firstInteractionTime.current === null) {
+            firstInteractionTime.current = now
+        }
+        lastKeystrokeTime.current = now
+    }
+
+    function checkSpamProtection() {
+        const now = Date.now()
+        const timeSincePageLoad = now - pageLoadTime.current
+        if (timeSincePageLoad < 3000) {
+            return { isSpam: true, message: 'Ознакомьтесь с формой перед заполнением. Потом попробуйте' }
+        }
+
+        if (firstInteractionTime.current !== null) {
+            const fillDuration = now - firstInteractionTime.current
+            if (fillDuration < 2000) {
+                return { isSpam: true, message: 'Не спешите!' }
+            }
+        }
+
+        submitAttempts.current += 1
+        if (submitAttempts.current > 3) {
+            return { isSpam: true, message: 'Слишком много попыток отправки. Подождите немного' }
+        }
+
+        return { isSpam: false, message: '' }
+    }
+
+    function validateUserName(value) {
+        if (value.trim().length === 0) return 'Имя обязательно для заполнения'
+        if (value.trim().length < 2) return 'Имя должно содержать минимум 2 символа'
+        if (/^\d/.test(value.trim())) return 'Имя не может начинаться с цифры'
+        return ''
+    }
+
+    function validateEmail(value) {
+        if (value.trim().length === 0) return 'Email обязателен для заполнения'
+        const emailPattern = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/
+        if (!emailPattern.test(value)) return 'Введите корректный Email'
+        return ''
+    }
+
+    function validatePhone(value) {
+        if (value.trim().length === 0) return 'Телефон обязателен для заполнения'
+        const cleaned = value.replace(/[\s\-()]/g, '')
+        if (!/^\+\d{10,12}$/.test(cleaned)) return 'Введите корректный номер (например: +71234567890)'
+        return ''
+    }
+
+    function validateMessage(value) {
+        if (value.trim().length === 0) return 'Сообщение обязательно для заполнения'
+        if (value.trim().length < 5) return 'Сообщение должно содержать минимум 5 символов'
+        return ''
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault()
+        
+        const spamCheck = checkSpamProtection()
+        if (spamCheck.isSpam) {
+            alert(spamCheck.message)
+            return
+        }
+
+        const usernameErr = validateUserName(username)
+        const emailErr = validateEmail(email)
+        const phoneErr = validatePhone(phone)
+        const messageErr = validateMessage(message)
+
+        if (usernameErr || emailErr || phoneErr || messageErr) {
+            setErrors({
+                username: usernameErr,
+                email: emailErr,
+                phone: phoneErr,
+                message: messageErr
+            })
+            setTouched({ username: true, email: true, phone: true, message: true })
+            alert('Пожалуйста, исправьте ошибки в форме')
+            return
+        }
+
+        const dataToSave = {
+            username: username,
+            email: email,
+            phone: phone,
+            message: message,
+            savedAt: new Date().toISOString()
+        }
+
+        localStorage.setItem('offerData', JSON.stringify(dataToSave))
+        alert(`Спасибо за заявку, ${username}! Вы получите 20% скидку на первую покупку`)
+
+        submitAttempts.current = 0
+        setUsername('')
+        setEmail('')
+        setPhone('')
+        setMessage('')
+        setTouched({ username: false, email: false, phone: false, message: false })
+        setErrors({ username: '', email: '', phone: '', message: '' })
+    }
+
+    function handleChange(fieldName) {
+        return function (event) {
+            markInteraction()
+            const value = event.target.value
+            let error = ''
+
+            switch (fieldName) {
+                case 'username':
+                    setUsername(value)
+                    error = validateUserName(value)
+                    break
+                case 'email':
+                    setEmail(value)
+                    error = validateEmail(value)
+                    break
+                case 'phone':
+                    setPhone(value)
+                    error = validatePhone(value)
+                    break
+                case 'message':
+                    setMessage(value)
+                    error = validateMessage(value)
+                    break
+            }
+
+            setErrors(prev => ({ ...prev, [fieldName]: error }))
+        }
+    }
+
+    function handleBlur(fieldName) {
+        return function () {
+            setTouched(prev => ({ ...prev, [fieldName]: true }))
+        }
+    }
+
+    return (
+        <section className="offer">
+            <div className='decor'>
+                <img src={decor} alt="decor" />
+            </div>
+
+            <div className="offer__title">
+                Get <span className="text_accent">20% Off</span> on <br />
+                first Purchase
+            </div>
+
+            <form className="offer__form" onSubmit={handleSubmit}>
+                <div className="form-field">
+                    <input 
+                        type="email" 
+                        placeholder="your email address"
+                        value={email}
+                        onChange={handleChange('email')}
+                        onBlur={handleBlur('email')}
+                    />
+                    {touched.email && errors.email && (
+                        <span className='error-message'>{errors.email}</span>
+                    )}
+                </div>
+
+                <div className="form-field">
+                    <input 
+                        type="text" 
+                        placeholder="your Full Name"
+                        value={username}
+                        onChange={handleChange('username')}
+                        onBlur={handleBlur('username')}
+                    />
+                    {touched.username && errors.username && (
+                        <span className='error-message'>{errors.username}</span>
+                    )}
+                </div>
+
+                <div className="form-field">
+                    <input 
+                        type="tel" 
+                        placeholder="your Phone Number"
+                        value={phone}
+                        onChange={handleChange('phone')}
+                        onBlur={handleBlur('phone')}
+                    />
+                    {touched.phone && errors.phone && (
+                        <span className='error-message'>{errors.phone}</span>
+                    )}
+                </div>
+
+                <div className="form-field">
+                    <input 
+                        type="text" 
+                        placeholder="Message"
+                        value={message}
+                        onChange={handleChange('message')}
+                        onBlur={handleBlur('message')}
+                    />
+                    {touched.message && errors.message && (
+                        <span className='error-message'>{errors.message}</span>
+                    )}
+                </div>
+
+                <button type="submit">Send Message</button>
+            </form>
+
+            <div className='decor'>
+                <img src={decor} alt="decor" />
+            </div>
+        </section>
+    )
+}
+
+export default Offer
